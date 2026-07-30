@@ -1,24 +1,29 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import AdminPanelDashboard from './AdminPanelDashboard';
+import UserDetails from './components/UserDetails';
+import ProductDetails from './components/ProductDetails';
+import OrderDetails from './components/OrderDetails'; // ✅ Add this line
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <div className="App">
+        <Routes>
+          {/* Main dashboard route */}
+          <Route path="/" element={<AdminPanelDashboard />} />
+
+          {/* User details route */}
+          <Route path="/user/:id" element={<UserDetails />} />
+
+          {/* Product details route */}
+          <Route path="/product/:productId" element={<ProductDetails />} />
+
+          {/* ✅ Order details route */}
+          <Route path="/order/:orderId" element={<OrderDetails />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 

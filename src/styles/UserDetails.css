@@ -1,0 +1,85 @@
+.user-detail-container {
+    min-height: 100vh;
+    padding: 28px;
+    background: #f6f7fb;
+    color: #111827;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.user-section {
+    max-width: 1180px;
+    margin: 0 auto 20px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(17, 24, 39, 0.06);
+    padding: 22px;
+    overflow-x: auto;
+}
+
+.user-section h2,
+.user-section h3 {
+    margin: 0 0 16px;
+    color: #111827;
+}
+
+.user-section p {
+    color: #374151;
+    line-height: 1.55;
+    margin: 8px 0;
+}
+
+.orders-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.orders-table thead {
+    background: #f8fafc;
+}
+
+.orders-table th,
+.orders-table td {
+    padding: 13px 14px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 14px;
+    vertical-align: top;
+}
+
+.orders-table th {
+    color: #374151;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.orders-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.orders-table tbody tr:hover {
+    background: #f9fbfc;
+}
+
+.orders-table td img {
+    width: 54px;
+    height: 54px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #e5e7eb;
+}
+
+@media (max-width: 760px) {
+    .user-detail-container {
+        padding: 18px;
+    }
+
+    .user-section {
+        padding: 16px;
+    }
+}
