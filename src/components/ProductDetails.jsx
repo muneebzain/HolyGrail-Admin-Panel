@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -13,29 +13,48 @@ import {
     normalizeProduct,
     normalizeVariation
 } from '../utils/adminModels';
+import LoadingState, { TableLoadingRow } from './LoadingState';
+import DetailBackButton from './DetailBackButton';
 import '../styles/ProductDetails.css';
 
 const ProductDetails = () => {
     const { productId } = useParams();
+    const navigate = useNavigate();
     const [product, setProduct] = useState(null);
     const [variations, setVariations] = useState([]);
     const [raffleData, setRaffleData] = useState([]);
     const [winner, setWinner] = useState(null);
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [relatedLoading, setRelatedLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
+        let active = true;
+
         const fetchProductData = async () => {
+            setLoading(true);
+            setRelatedLoading(true);
+            setLoadError('');
+
             try {
                 const productRef = doc(db, COLLECTIONS.products, productId);
+                const variationRequest = getDocs(collection(db, COLLECTIONS.products, productId, 'variations'));
                 const productSnap = await getDoc(productRef);
 
-                if (!productSnap.exists()) return;
+                if (!active) return;
+                if (!productSnap.exists()) {
+                    setProduct(null);
+                    setLoadError('Product not found.');
+                    return;
+                }
 
                 const productData = normalizeProduct(productSnap);
                 setProduct(productData);
+                setLoading(false);
 
-                const variationSnap = await getDocs(collection(db, COLLECTIONS.products, productId, 'variations'));
+                const variationSnap = await variationRequest;
+                if (!active) return;
                 const variationData = variationSnap.docs.map(normalizeVariation);
                 setVariations(variationData);
 
@@ -52,37 +71,49 @@ const ProductDetails = () => {
                         entry.slots.push(index + 1);
                     });
 
-                    const raffleArray = await Promise.all(
-                        Array.from(map.entries()).map(async ([userId, data]) => {
-                            const userSnap = await getDoc(doc(db, COLLECTIONS.users, userId));
-                            return {
-                                user: userSnap.exists() ? userSnap.data() : { email: userId },
-                                totalPaid: data.price,
-                                slots: data.slots
-                            };
-                        })
+                    const userIds = [...new Set([
+                        ...map.keys(),
+                        ...(productData.winnerId ? [productData.winnerId] : [])
+                    ])];
+                    const userSnaps = await Promise.all(
+                        userIds.map((userId) => getDoc(doc(db, COLLECTIONS.users, userId)))
                     );
+                    if (!active) return;
+
+                    const usersById = new Map(userSnaps.map((snapshot, index) => [
+                        userIds[index],
+                        snapshot.exists() ? snapshot.data() : { email: userIds[index] }
+                    ]));
+                    const raffleArray = Array.from(map.entries()).map(([userId, data]) => ({
+                        user: usersById.get(userId),
+                        totalPaid: data.price,
+                        slots: data.slots
+                    }));
 
                     setRaffleData(raffleArray);
-
-                    if (productData.winnerId) {
-                        const winnerSnap = await getDoc(doc(db, COLLECTIONS.users, productData.winnerId));
-                        if (winnerSnap.exists()) setWinner(winnerSnap.data());
-                    }
+                    setWinner(productData.winnerId ? usersById.get(productData.winnerId) || null : null);
                 } else {
                     const ordersQuery = query(collection(db, COLLECTIONS.orders), where('productId', '==', productId));
                     const ordersSnap = await getDocs(ordersQuery);
+                    if (!active) return;
                     const productOrders = ordersSnap.docs.map(normalizeOrder);
                     setOrders(productOrders);
                 }
             } catch (error) {
                 console.error('Error loading product details:', error);
+                if (active) setLoadError('Unable to load all product details. Please try again.');
             } finally {
-                setLoading(false);
+                if (active) {
+                    setLoading(false);
+                    setRelatedLoading(false);
+                }
             }
         };
 
         fetchProductData();
+        return () => {
+            active = false;
+        };
     }, [productId]);
 
     const handleDeleteImage = async (index) => {
@@ -105,7 +136,7 @@ const ProductDetails = () => {
 
         try {
             await deleteDoc(doc(db, COLLECTIONS.products, productId));
-            window.close();
+            navigate(-1);
         } catch (error) {
             console.error('Error deleting product:', error);
         }
@@ -113,8 +144,10 @@ const ProductDetails = () => {
 
     return (
         <div className="product-detail-container">
+            <div className="detail-page-toolbar"><DetailBackButton /></div>
+            {loadError && !loading && <div className="product-info">{loadError}</div>}
             {loading ? (
-                <p>Loading product details...</p>
+                <LoadingState message="Loading product details..." detail="Preparing variations, orders, and raffle information." />
             ) : product ? (
                 <>
                     <div className="product-images-slider">
@@ -164,7 +197,9 @@ const ProductDetails = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {variations.length > 0 ? variations.map((v, idx) => (
+                                {relatedLoading ? (
+                                    <TableLoadingRow colSpan={6} message="Loading variations..." detail="Retrieving product options." />
+                                ) : variations.length > 0 ? variations.map((v, idx) => (
                                     <tr key={idx}>
                                         <td>{v.size}</td>
                                         <td>{v.brand}</td>
@@ -191,7 +226,9 @@ const ProductDetails = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {raffleData.length > 0 ? raffleData.map((entry, idx) => (
+                                        {relatedLoading ? (
+                                            <TableLoadingRow colSpan={3} message="Loading participants..." detail="Retrieving raffle entries and users." />
+                                        ) : raffleData.length > 0 ? raffleData.map((entry, idx) => (
                                             <tr key={idx}>
                                                 <td>{formatName(entry.user)} ({entry.user.email})</td>
                                                 <td>{formatCurrency(entry.totalPaid)}</td>
@@ -228,7 +265,9 @@ const ProductDetails = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {orders.length > 0 ? orders.map((o, idx) => (
+                                    {relatedLoading ? (
+                                        <TableLoadingRow colSpan={4} message="Loading orders..." detail="Retrieving orders for this product." />
+                                    ) : orders.length > 0 ? orders.map((o, idx) => (
                                         <tr key={idx}>
                                             <td>{o.orderId}</td>
                                             <td>{o.quantity}</td>

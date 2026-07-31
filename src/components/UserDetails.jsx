@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
     COLLECTIONS,
@@ -12,6 +12,8 @@ import {
     normalizeUser,
     normalizeVariation
 } from '../utils/adminModels';
+import LoadingState, { TableLoadingRow } from './LoadingState';
+import DetailBackButton from './DetailBackButton';
 import '../styles/UserDetails.css';
 
 const UserDetails = () => {
@@ -20,73 +22,130 @@ const UserDetails = () => {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [relatedLoading, setRelatedLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
+        let active = true;
+
         const fetchUserData = async () => {
+            setLoading(true);
+            setRelatedLoading(true);
+            setLoadError('');
+
             try {
                 if (!id) {
-                    console.error("User ID not found in URL params.");
+                    setLoadError('User ID was not found.');
                     return;
                 }
 
-                const userRef = doc(db, COLLECTIONS.users, id);
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists()) {
-                    const userData = normalizeUser(userSnap);
-                    setUser(userData);
+                const ordersRef = collection(db, COLLECTIONS.orders);
+                const productsRef = collection(db, COLLECTIONS.products);
+                const relatedRequest = Promise.all([
+                    getDocs(query(ordersRef, where('purchasedBy', '==', id))),
+                    getDocs(query(ordersRef, where('buyerId', '==', id))),
+                    getDocs(query(productsRef, where('userId', '==', id))),
+                    getDocs(query(productsRef, where('sellerId', '==', id)))
+                ]);
 
-                    const ordersSnap = await getDocs(collection(db, COLLECTIONS.orders));
-                    const ordersData = await Promise.all(
-                        ordersSnap.docs.map(async docSnap => {
-                            const data = normalizeOrder(docSnap);
-                            if (data.buyerId !== id) return null;
+                const userSnap = await getDoc(doc(db, COLLECTIONS.users, id));
+                if (!active) return;
 
-                            const productRef = doc(db, COLLECTIONS.products, data.productId);
-                            const productSnap = await getDoc(productRef);
-                            const productData = productSnap.exists() ? normalizeProduct(productSnap) : null;
-
-                            let variationData = null;
-                            if (data.productId && data.variantId) {
-                                const variationRef = doc(db, COLLECTIONS.products, data.productId, 'variations', data.variantId);
-                                const variationSnap = await getDoc(variationRef);
-                                variationData = variationSnap.exists() ? normalizeVariation(variationSnap) : null;
-                            }
-
-                            return {
-                                ...data,
-                                productTitle: productData?.title || 'N/A',
-                                productImage: productData?.images?.[0] || '',
-                                variation: variationData || null
-                            };
-                        })
-                    );
-                    setOrders(ordersData.filter(Boolean));
-
-                    const productsSnap = await getDocs(collection(db, COLLECTIONS.products));
-                    const productsData = productsSnap.docs
-                        .map(normalizeProduct)
-                        .filter((product) => product.sellerId === id);
-                    setProducts(productsData);
-                } else {
-                    console.warn('User not found for ID:', id);
+                if (!userSnap.exists()) {
+                    setUser(null);
+                    setLoadError('User not found.');
+                    return;
                 }
+
+                setUser(normalizeUser(userSnap));
+                setLoading(false);
+
+                const [purchasedOrdersSnap, buyerOrdersSnap, uploadedProductsSnap, sellerProductsSnap] = await relatedRequest;
+                if (!active) return;
+
+                const orderDocs = Array.from(new Map(
+                    [...purchasedOrdersSnap.docs, ...buyerOrdersSnap.docs].map((snapshot) => [snapshot.id, snapshot])
+                ).values());
+                const productDocs = Array.from(new Map(
+                    [...uploadedProductsSnap.docs, ...sellerProductsSnap.docs].map((snapshot) => [snapshot.id, snapshot])
+                ).values());
+                const normalizedOrders = orderDocs.map(normalizeOrder);
+                const productIds = [...new Set(normalizedOrders.map((order) => order.productId).filter(Boolean))];
+                const variationKeys = [...new Map(
+                    normalizedOrders
+                        .filter((order) => order.productId && order.variantId)
+                        .map((order) => [`${order.productId}/${order.variantId}`, order])
+                ).values()];
+
+                const [purchasedProductSnaps, variationSnaps] = await Promise.all([
+                    Promise.all(productIds.map((productId) => getDoc(doc(db, COLLECTIONS.products, productId)))),
+                    Promise.all(variationKeys.map((order) => getDoc(doc(
+                        db,
+                        COLLECTIONS.products,
+                        order.productId,
+                        'variations',
+                        order.variantId
+                    ))))
+                ]);
+                if (!active) return;
+
+                const purchasedProducts = new Map(
+                    purchasedProductSnaps
+                        .filter((snapshot) => snapshot.exists())
+                        .map((snapshot) => [snapshot.id, normalizeProduct(snapshot)])
+                );
+                const variations = new Map(
+                    variationSnaps
+                        .filter((snapshot) => snapshot.exists())
+                        .map((snapshot) => {
+                            const variation = normalizeVariation(snapshot);
+                            return [`${snapshot.ref.parent.parent.id}/${snapshot.id}`, variation];
+                        })
+                );
+
+                setProducts(productDocs.map(normalizeProduct));
+                setOrders(normalizedOrders.map((order) => {
+                    const product = purchasedProducts.get(order.productId);
+                    return {
+                        ...order,
+                        productTitle: product?.title || 'N/A',
+                        productImage: product?.images?.[0] || '',
+                        variation: variations.get(`${order.productId}/${order.variantId}`) || null
+                    };
+                }));
             } catch (error) {
                 console.error('Error fetching user details:', error);
+                if (active) setLoadError('Unable to load all user details. Please try again.');
             } finally {
-                setLoading(false);
+                if (active) {
+                    setLoading(false);
+                    setRelatedLoading(false);
+                }
             }
         };
 
         fetchUserData();
+        return () => {
+            active = false;
+        };
     }, [id]);
+
+    if (loading) {
+        return (
+            <div className="user-detail-container">
+                <div className="detail-page-toolbar"><DetailBackButton /></div>
+                <LoadingState message="Loading user details..." detail="Preparing account, products, and order history." />
+            </div>
+        );
+    }
 
     return (
         <div className="user-detail-container">
+            <div className="detail-page-toolbar"><DetailBackButton /></div>
+            {loadError && <div className="user-section">{loadError}</div>}
             <div className="user-section">
                 <h2>User Details</h2>
-                {loading ? (
-                    <p>Loading user details...</p>
-                ) : user ? (
+                {user ? (
                     <>
                         <p><strong>Name:</strong> {formatName(user)}</p>
                         <p><strong>Email:</strong> {user.email}</p>
@@ -113,7 +172,9 @@ const UserDetails = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {products.length > 0 ? (
+                        {relatedLoading ? (
+                            <TableLoadingRow colSpan={4} message="Loading products..." detail="Retrieving this user's listings." />
+                        ) : products.length > 0 ? (
                             products.map(product => (
                                 <tr key={product.id}>
                                     <td>{product.title}</td>
@@ -147,7 +208,9 @@ const UserDetails = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {orders.length > 0 ? (
+                        {relatedLoading ? (
+                            <TableLoadingRow colSpan={6} message="Loading orders..." detail="Retrieving purchases and product details." />
+                        ) : orders.length > 0 ? (
                             orders.map(order => (
                                 <tr key={order.id}>
                                     <td>{order.orderId}</td>

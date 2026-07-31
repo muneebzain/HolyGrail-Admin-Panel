@@ -202,16 +202,27 @@ export const normalizeOrder = (docSnapOrData) => {
         paymentMethod: getFirstValue(raw.paymentMethod, raw.paymentType),
         paidByBuyer: centsToDollars(getFirstValue(raw.paidByBuyer, raw.totalAmount, raw.total, raw.amount), raw.paidByBuyerCents),
         sellerMade: centsToDollars(getFirstValue(raw.sellerMade, raw.sellerPayout, raw.payout), raw.sellerMadeCents),
+        shippingCharge: raw.buyerShippingCost !== undefined || raw.buyerShippingCostCents !== undefined
+            ? centsToDollars(raw.buyerShippingCost, raw.buyerShippingCostCents)
+            : raw.sellerShippingCredit !== undefined
+                ? Number(raw.sellerShippingCredit) / 100
+                : '',
         shippingCost: centsToDollars(raw.shippingCost, raw.shippingCostCents),
+        shippingAdminFee: centsToDollars(raw.shippingAdminFee, raw.shippingAdminFeeCents),
         shippingTag: getFirstValue(raw.shippingTag, raw.tracking, raw.trackingId, raw.trackingNumber),
         trackingNumber: getFirstValue(raw.trackingNumber, raw.shippingTag, raw.tracking),
         shippingProvider: getFirstValue(raw.shippingProvider),
-        shippingServiceLevel: getFirstValue(raw.shippingServiceLevel),
         shippingLabelId: getFirstValue(raw.shippingLabelId),
+        shippingLabelUrl: getFirstValue(raw.shippingLabelUrl),
+        sellerNetAfterShipping: raw.sellerNetAfterShipping !== undefined || raw.sellerNetAfterShippingCents !== undefined
+            ? centsToDollars(raw.sellerNetAfterShipping, raw.sellerNetAfterShippingCents)
+            : null,
         marketplacePaymentId: getFirstValue(raw.marketplacePaymentId),
         stripePaymentIntentId: getFirstValue(raw.stripePaymentIntentId),
         sellerPayoutStatus: getFirstValue(raw.sellerPayoutStatus),
-        fundsReleasedAt: getFirstValue(raw.fundsReleasedAt),
+        sellerEarningsStatus: getFirstValue(raw.sellerEarningsStatus),
+        fundsReleasedAt: getFirstValue(raw.fundsReleasedAt, raw.sellerFundsReleasedAt, raw.sellerFundsPendingAt),
+        deliveredAt: getFirstValue(raw.deliveredAt, raw.deliveredAtSeconds),
         quantity: getFirstValue(raw.quantity, raw.qty, 1)
     };
 };

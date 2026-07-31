@@ -1,21 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './firebase';
 import Dashboard from './components/Dashboard';
 import UserTable from './components/UserTable';
 import ProductTable from './components/ProductTable';
 import SupportTable from './components/SupportTable';
 import OrderTable from './components/OrderTable';
+import LoadingState from './components/LoadingState';
 import './AdminPanel.css';
 
 const ADMIN_EMAIL = 'adminholygrail@gmail.com';
+const ADMIN_TABS = new Set(['dashboard', 'users', 'products', 'support', 'orders']);
 
 const AdminPanelDashboard = () => {
-    const auth = getAuth();
     const [user, setUser] = useState(null);
-    const [selectedTab, setSelectedTab] = useState('dashboard');
+    const [selectedTab, setSelectedTab] = useState(() => {
+        const savedTab = sessionStorage.getItem('adminSelectedTab');
+        return ADMIN_TABS.has(savedTab) ? savedTab : 'dashboard';
+    });
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [checkingAuth, setCheckingAuth] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -24,9 +30,10 @@ const AdminPanelDashboard = () => {
             } else {
                 setUser(null);
             }
+            setCheckingAuth(false);
         });
         return () => unsubscribe();
-    }, [auth]);
+    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -48,6 +55,11 @@ const AdminPanelDashboard = () => {
         signOut(auth);
     };
 
+    const selectTab = (tab) => {
+        sessionStorage.setItem('adminSelectedTab', tab);
+        setSelectedTab(tab);
+    };
+
     const renderSelectedTab = () => {
         switch (selectedTab) {
             case 'dashboard': return <Dashboard />;
@@ -58,6 +70,10 @@ const AdminPanelDashboard = () => {
             default: return <Dashboard />;
         }
     };
+
+    if (checkingAuth) {
+        return <LoadingState message="Loading admin panel..." detail="Checking your secure session." fullPage />;
+    }
 
     if (!user) {
         return (
@@ -95,11 +111,11 @@ const AdminPanelDashboard = () => {
                 <button onClick={handleLogout} className="logout-btn">Logout</button>
             </div>
             <div className="tab-buttons">
-                <button onClick={() => setSelectedTab('dashboard')} className={selectedTab === 'dashboard' ? 'active' : ''}>Dashboard</button>
-                <button onClick={() => setSelectedTab('users')} className={selectedTab === 'users' ? 'active' : ''}>Users</button>
-                <button onClick={() => setSelectedTab('products')} className={selectedTab === 'products' ? 'active' : ''}>Products</button>
-                <button onClick={() => setSelectedTab('support')} className={selectedTab === 'support' ? 'active' : ''}>Support Tickets</button>
-                <button onClick={() => setSelectedTab('orders')} className={selectedTab === 'orders' ? 'active' : ''}>Orders</button>
+                <button onClick={() => selectTab('dashboard')} className={selectedTab === 'dashboard' ? 'active' : ''}>Dashboard</button>
+                <button onClick={() => selectTab('users')} className={selectedTab === 'users' ? 'active' : ''}>Users</button>
+                <button onClick={() => selectTab('products')} className={selectedTab === 'products' ? 'active' : ''}>Products</button>
+                <button onClick={() => selectTab('support')} className={selectedTab === 'support' ? 'active' : ''}>Support Tickets</button>
+                <button onClick={() => selectTab('orders')} className={selectedTab === 'orders' ? 'active' : ''}>Orders</button>
             </div>
             <div className="tab-content">
                 {renderSelectedTab()}

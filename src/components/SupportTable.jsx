@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import DetailModal from './DetailModal';
+import { TableLoadingRow } from './LoadingState';
 import { COLLECTIONS, formatDateTime, normalizeSupportTicket } from '../utils/adminModels';
 
 const SupportTable = () => {
@@ -11,6 +12,8 @@ const SupportTable = () => {
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, COLLECTIONS.support), (snapshot) => {
@@ -22,6 +25,12 @@ const SupportTable = () => {
             });
 
             setTickets(sorted);
+            setLoadError('');
+            setLoading(false);
+        }, (error) => {
+            console.error('Error loading support tickets:', error);
+            setLoadError('Support tickets could not be loaded. Please refresh and try again.');
+            setLoading(false);
         });
 
         return () => unsubscribe();
@@ -85,7 +94,11 @@ const SupportTable = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length === 0 ? (
+                        {loading ? (
+                            <TableLoadingRow colSpan={6} message="Loading support tickets..." detail="Preparing customer messages and statuses." />
+                        ) : loadError ? (
+                            <tr><td colSpan="6" className="table-error-cell">{loadError}</td></tr>
+                        ) : filtered.length === 0 ? (
                             <tr><td colSpan="6" className="no-data">No support tickets found</td></tr>
                         ) : (
                             filtered.map((ticket) => (

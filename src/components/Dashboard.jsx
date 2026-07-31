@@ -3,6 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { FaBox, FaClipboardList, FaGift, FaShoppingCart, FaTicketAlt, FaUsers } from 'react-icons/fa';
 import { db } from '../firebase';
 import { COLLECTIONS, normalizeProduct } from '../utils/adminModels';
+import LoadingState from './LoadingState';
 import '../styles/Dashboard.css';
 
 const Dashboard = () => {
@@ -14,26 +15,37 @@ const Dashboard = () => {
         orders: 0,
         tickets: 0
     });
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         const fetchStats = async () => {
-            const usersSnap = await getDocs(collection(db, COLLECTIONS.users));
-            const productsSnap = await getDocs(collection(db, COLLECTIONS.products));
-            const ordersSnap = await getDocs(collection(db, COLLECTIONS.orders));
-            const ticketsSnap = await getDocs(collection(db, COLLECTIONS.support));
+            try {
+                const [usersSnap, productsSnap, ordersSnap, ticketsSnap] = await Promise.all([
+                    getDocs(collection(db, COLLECTIONS.users)),
+                    getDocs(collection(db, COLLECTIONS.products)),
+                    getDocs(collection(db, COLLECTIONS.orders)),
+                    getDocs(collection(db, COLLECTIONS.support))
+                ]);
 
-            const productDocs = productsSnap.docs.map(normalizeProduct);
-            const raffles = productDocs.filter((product) => product.kind === 'Raffle').length;
-            const oneTime = productDocs.filter((product) => product.kind === 'One Time').length;
+                const productDocs = productsSnap.docs.map(normalizeProduct);
+                const raffles = productDocs.filter((product) => product.kind === 'Raffle').length;
+                const oneTime = productDocs.filter((product) => product.kind === 'One Time').length;
 
-            setStats({
-                users: usersSnap.size,
-                products: productsSnap.size,
-                raffles,
-                oneTime,
-                orders: ordersSnap.size,
-                tickets: ticketsSnap.size
-            });
+                setStats({
+                    users: usersSnap.size,
+                    products: productsSnap.size,
+                    raffles,
+                    oneTime,
+                    orders: ordersSnap.size,
+                    tickets: ticketsSnap.size
+                });
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                setLoadError('Dashboard information could not be loaded.');
+            } finally {
+                setLoading(false);
+            }
         };
 
         fetchStats();
@@ -56,17 +68,23 @@ const Dashboard = () => {
                     <p>Current admin snapshot</p>
                 </div>
             </div>
-            <div className="stats-grid">
-                {statItems.map((item) => (
-                    <div className={`stat-card ${item.tone}`} key={item.label}>
-                        <div className="stat-icon">{item.icon}</div>
-                        <div className="stat-info">
-                            <span>{item.label}</span>
-                            <strong>{item.value}</strong>
+            {loading ? (
+                <LoadingState message="Loading dashboard..." detail="Calculating the latest admin totals." />
+            ) : loadError ? (
+                <div className="page-error-state">{loadError}</div>
+            ) : (
+                <div className="stats-grid">
+                    {statItems.map((item) => (
+                        <div className={`stat-card ${item.tone}`} key={item.label}>
+                            <div className="stat-icon">{item.icon}</div>
+                            <div className="stat-info">
+                                <span>{item.label}</span>
+                                <strong>{item.value}</strong>
+                            </div>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

@@ -3,15 +3,24 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { COLLECTIONS, formatCurrency, formatDate, normalizeUser } from '../utils/adminModels';
+import { TableLoadingRow } from './LoadingState';
 
 const UserTable = () => {
     const [users, setUsers] = useState([]);
     const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, COLLECTIONS.users), (snapshot) => {
             const userList = snapshot.docs.map(normalizeUser);
             setUsers(userList);
+            setLoadError('');
+            setLoading(false);
+        }, (error) => {
+            console.error('Error loading users:', error);
+            setLoadError('Users could not be loaded. Please refresh and try again.');
+            setLoading(false);
         });
 
         return () => unsubscribe();
@@ -54,7 +63,11 @@ const UserTable = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length === 0 ? (
+                        {loading ? (
+                            <TableLoadingRow colSpan={7} message="Loading users..." detail="Preparing account and seller details." />
+                        ) : loadError ? (
+                            <tr><td colSpan="7" className="table-error-cell">{loadError}</td></tr>
+                        ) : filtered.length === 0 ? (
                             <tr><td colSpan="7" className="no-data">No users found</td></tr>
                         ) : (
                             filtered.map((user) => (
@@ -69,7 +82,7 @@ const UserTable = () => {
                                     <td>{user.sellerStatus || 'N/A'}</td>
                                     <td>{formatDate(user.joinedAt)}</td>
                                     <td>
-                                        <Link to={`/user/${user.id}`} target="_blank" className="view-btn">
+                                        <Link to={`/user/${user.id}`} className="view-btn">
                                             View
                                         </Link>
                                     </td>

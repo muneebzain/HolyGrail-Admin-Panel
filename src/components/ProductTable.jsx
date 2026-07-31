@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { COLLECTIONS, formatBoolean, formatCurrency, formatDate, normalizeProduct } from '../utils/adminModels';
+import { TableLoadingRow } from './LoadingState';
 
 const categoryMap = {
     Shoes: ['All', 'Sneakers', 'Boots', 'Loafers', 'Sandals'],
@@ -15,6 +17,8 @@ const ProductTable = () => {
     const [filterType, setFilterType] = useState('All');
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterSubCategory, setFilterSubCategory] = useState('All');
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, COLLECTIONS.products), (snapshot) => {
@@ -26,6 +30,12 @@ const ProductTable = () => {
             });
 
             setProducts(sorted);
+            setLoadError('');
+            setLoading(false);
+        }, (error) => {
+            console.error('Error loading products:', error);
+            setLoadError('Products could not be loaded. Please refresh and try again.');
+            setLoading(false);
         });
 
         return () => unsubscribe();
@@ -107,7 +117,11 @@ const ProductTable = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length === 0 ? (
+                        {loading ? (
+                            <TableLoadingRow colSpan={8} message="Loading products..." detail="Preparing listings and product images." />
+                        ) : loadError ? (
+                            <tr><td colSpan="8" className="table-error-cell">{loadError}</td></tr>
+                        ) : filtered.length === 0 ? (
                             <tr>
                                 <td colSpan="8" className="no-data">No products found</td>
                             </tr>
@@ -134,14 +148,9 @@ const ProductTable = () => {
                                     <td>{formatBoolean(product.isApproved)}</td>
                                     <td>{product.kind === 'Raffle' ? formatDate(product.eventStartDate) : formatDate(product.uploadDate)}</td>
                                     <td>
-                                        <a
-                                            href={`/product/${product.id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="view-btn"
-                                        >
+                                        <Link to={`/product/${product.id}`} className="view-btn">
                                             View
-                                        </a>
+                                        </Link>
                                     </td>
                                 </tr>
                             ))

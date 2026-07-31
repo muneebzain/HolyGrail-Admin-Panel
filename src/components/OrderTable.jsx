@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -9,78 +10,96 @@ import {
     formatName,
     normalizeOrder,
     normalizeProduct,
-    normalizeVariation
+    normalizeVariation,
+    toDate
 } from '../utils/adminModels';
+import { TableLoadingRow } from './LoadingState';
 
 const OrderTable = () => {
     const [enrichedOrders, setEnrichedOrders] = useState([]);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [dateSort, setDateSort] = useState('desc');
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, COLLECTIONS.orders), async (snapshot) => {
-            const rawOrders = snapshot.docs.map(normalizeOrder);
-            rawOrders.sort((a, b) => {
-                const dateA = a.orderDate?.toMillis?.() || a.orderDate?.seconds || 0;
-                const dateB = b.orderDate?.toMillis?.() || b.orderDate?.seconds || 0;
-                return dateB - dateA;
-            });
+            setLoading(true);
+            setLoadError('');
 
-            const enriched = await Promise.all(
-                rawOrders.map(async (order) => {
-                    let product = null;
-                    let variation = null;
-                    let buyer = null;
-                    let seller = null;
+            try {
+                const rawOrders = snapshot.docs.map(normalizeOrder);
+                const enriched = await Promise.all(
+                    rawOrders.map(async (order) => {
+                        let product = null;
+                        let variation = null;
+                        let buyer = null;
+                        let seller = null;
 
-                    try {
-                        if (order.productId) {
-                            const productDoc = await getDoc(doc(db, COLLECTIONS.products, order.productId));
-                            if (productDoc.exists()) product = normalizeProduct(productDoc);
+                        try {
+                            if (order.productId) {
+                                const productDoc = await getDoc(doc(db, COLLECTIONS.products, order.productId));
+                                if (productDoc.exists()) product = normalizeProduct(productDoc);
 
-                            if (order.variantId) {
-                                const variationDoc = await getDoc(doc(db, COLLECTIONS.products, order.productId, 'variations', order.variantId));
-                                if (variationDoc.exists()) variation = normalizeVariation(variationDoc);
+                                if (order.variantId) {
+                                    const variationDoc = await getDoc(doc(db, COLLECTIONS.products, order.productId, 'variations', order.variantId));
+                                    if (variationDoc.exists()) variation = normalizeVariation(variationDoc);
+                                }
                             }
+
+                            if (order.buyerId) {
+                                const buyerDoc = await getDoc(doc(db, COLLECTIONS.users, order.buyerId));
+                                if (buyerDoc.exists()) buyer = buyerDoc.data();
+                            }
+
+                            if (order.sellerId) {
+                                const sellerDoc = await getDoc(doc(db, COLLECTIONS.users, order.sellerId));
+                                if (sellerDoc.exists()) seller = sellerDoc.data();
+                            }
+                        } catch (err) {
+                            console.error('Enrichment error for order:', order.orderId, err);
                         }
 
-                        if (order.buyerId) {
-                            const buyerDoc = await getDoc(doc(db, COLLECTIONS.users, order.buyerId));
-                            if (buyerDoc.exists()) buyer = buyerDoc.data();
-                        }
+                        return {
+                            ...order,
+                            productTitle: product?.title || 'N/A',
+                            productImage: product?.images?.[0] || '',
+                            variation,
+                            buyerName: buyer ? formatName(buyer) : 'N/A',
+                            buyerAddress: buyer ? formatAddress(buyer) : 'N/A',
+                            sellerName: seller ? formatName(seller) : 'N/A'
+                        };
+                    })
+                );
 
-                        if (order.sellerId) {
-                            const sellerDoc = await getDoc(doc(db, COLLECTIONS.users, order.sellerId));
-                            if (sellerDoc.exists()) seller = sellerDoc.data();
-                        }
-                    } catch (err) {
-                        console.error('Enrichment error for order:', order.orderId, err);
-                    }
-
-                    return {
-                        ...order,
-                        productTitle: product?.title || 'N/A',
-                        productImage: product?.images?.[0] || '',
-                        variation,
-                        buyerName: buyer ? formatName(buyer) : 'N/A',
-                        buyerAddress: buyer ? formatAddress(buyer) : 'N/A',
-                        sellerName: seller ? formatName(seller) : 'N/A'
-                    };
-                })
-            );
-
-            setEnrichedOrders(enriched);
+                setEnrichedOrders(enriched);
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                setLoadError('Orders could not be loaded. Please refresh and try again.');
+            } finally {
+                setLoading(false);
+            }
+        }, (error) => {
+            console.error('Orders listener error:', error);
+            setLoadError('Orders could not be loaded. Please refresh and try again.');
+            setLoading(false);
         });
 
         return () => unsubscribe();
     }, []);
 
-    const filtered = enrichedOrders
+    const filtered = useMemo(() => enrichedOrders
         .filter((order) => {
             const searchText = `${order.orderId} ${order.productTitle} ${order.buyerName} ${order.sellerName}`.toLowerCase();
             return searchText.includes(search.toLowerCase());
         })
-        .filter((order) => statusFilter === 'All' || order.orderStatus?.toLowerCase() === statusFilter.toLowerCase());
+        .filter((order) => statusFilter === 'All' || order.orderStatus?.toLowerCase() === statusFilter.toLowerCase())
+        .sort((a, b) => {
+            const dateA = toDate(a.orderDate)?.getTime() || 0;
+            const dateB = toDate(b.orderDate)?.getTime() || 0;
+            return dateSort === 'asc' ? dateA - dateB : dateB - dateA;
+        }), [dateSort, enrichedOrders, search, statusFilter]);
 
     return (
         <div className="panel-section">
@@ -105,6 +124,14 @@ const OrderTable = () => {
                     <option value="Delivered">Delivered</option>
                     <option value="Cancelled">Cancelled</option>
                 </select>
+                <select
+                    value={dateSort}
+                    onChange={(e) => setDateSort(e.target.value)}
+                    aria-label="Sort orders by date"
+                >
+                    <option value="desc">Newest to Oldest</option>
+                    <option value="asc">Oldest to Newest</option>
+                </select>
             </div>
 
             <div className="table-shell">
@@ -123,7 +150,15 @@ const OrderTable = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length === 0 ? (
+                        {loading ? (
+                            <TableLoadingRow
+                                colSpan={9}
+                                message="Loading orders..."
+                                detail="Preparing product, buyer, and seller details."
+                            />
+                        ) : loadError ? (
+                            <tr><td colSpan="9" className="table-error-cell">{loadError}</td></tr>
+                        ) : filtered.length === 0 ? (
                             <tr><td colSpan="9" className="no-data">No orders found</td></tr>
                         ) : (
                             filtered.map((order) => (
@@ -162,18 +197,13 @@ const OrderTable = () => {
                                     <td>{formatCurrency(order.paidByBuyer)}</td>
                                     <td>
                                         <strong>{order.trackingNumber || 'N/A'}</strong>
-                                        <span className="muted-line">{order.shippingProvider || order.shippingServiceLevel || ''}</span>
+                                        <span className="muted-line">{order.shippingProvider || ''}</span>
                                     </td>
                                     <td><span className="status-pill">{order.orderStatus}</span></td>
                                     <td>
-                                        <a
-                                            href={`/order/${order.id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="view-btn"
-                                        >
+                                        <Link to={`/order/${order.id}`} className="view-btn">
                                             View
-                                        </a>
+                                        </Link>
                                     </td>
                                 </tr>
                             ))

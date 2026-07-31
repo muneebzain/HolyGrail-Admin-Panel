@@ -11,3 +11,26 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.detail-page-toolbar {
+  max-width: 1180px;
+  margin: 0 auto 16px;
+  text-align: left;
+}
+
+.detail-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: #164e63;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detail-back-button:hover {
+  color: #0f3442;
+}

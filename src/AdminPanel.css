@@ -340,6 +340,97 @@ td img {
     font-style: normal;
 }
 
+.table-loading-cell,
+.table-error-cell {
+    height: 190px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.table-loading-cell strong,
+.table-loading-cell > span:last-child {
+    display: block;
+}
+
+.table-loading-cell strong {
+    margin-top: 12px;
+    font-size: 15px;
+}
+
+.table-loading-cell > span:last-child {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.admin-spinner {
+    width: 28px;
+    height: 28px;
+    display: inline-block;
+    border: 3px solid #dbe7ea;
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: admin-spin 0.75s linear infinite;
+}
+
+.table-error-cell,
+.page-error-state {
+    color: var(--red);
+    font-weight: 700;
+}
+
+.page-loading-state {
+    min-height: 190px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px;
+}
+
+.page-loading-state strong {
+    margin-top: 12px;
+    font-size: 15px;
+}
+
+.page-loading-state > span:last-child {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.full-page-loading {
+    min-height: 100vh;
+    background: var(--bg);
+}
+
+.page-error-state {
+    min-height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px;
+}
+
+.full-page-state {
+    min-height: 100vh;
+    background: var(--bg);
+}
+
+@keyframes admin-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-spinner {
+        animation-duration: 1.5s;
+    }
+}
+
 .modal-overlay {
     position: fixed;
     inset: 0;
