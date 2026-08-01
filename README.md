@@ -2,6 +2,10 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Firebase configuration
+
+Copy `.env.example` to `.env.local` and replace the placeholder values with the Firebase web app configuration. Environment files are ignored by Git and must not be committed.
+
 ## Available Scripts
 
 In the project directory, you can run:
